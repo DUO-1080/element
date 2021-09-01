@@ -49,7 +49,7 @@ export default {
             }, [])
           }
           <el-tooltip effect={this.table.tooltipEffect} placement="top" ref="tooltip"
-            content={this.tooltipContent}/>
+            content={this.tooltipContent}></el-tooltip>
         </tbody>
       </table>
     );
@@ -57,7 +57,13 @@ export default {
 
   computed: {
     table() {
-      return this.$parent;
+      let el = null;
+      if (this.$parent.table || this.$parent.layout) {
+        el = this.$parent;
+      } else {
+        el = this.$parent.$parent;
+      }
+      return el;
     },
 
     ...mapStates({

@@ -36,33 +36,36 @@
         :class="[layout.scrollX ? `is-scrolling-${scrollPosition}` : 'is-scrolling-none']"
         :style="[bodyHeight]"
         class="el-table__body-wrapper">
-      <table-body
-          :context="context"
-          :highlight="highlightCurrentRow"
-          :row-class-name="rowClassName"
-          :row-style="rowStyle"
-          :store="store"
-          :stripe="stripe"
-          :style="{
-           width: bodyWidth
-        }">
-      </table-body>
-      <div
-          v-if="!data || data.length === 0"
-          ref="emptyBlock"
-          :style="emptyBlockStyle"
-          class="el-table__empty-block">
-        <span class="el-table__empty-text">
-          <slot name="empty">{{ emptyText || t('el.table.emptyText') }}</slot>
-        </span>
-      </div>
-      <div
-          v-if="$slots.append"
-          ref="appendWrapper"
-          class="el-table__append-wrapper">
-        <slot name="append"></slot>
-      </div>
+      <el-scrollbar ref="bodyWrapperScrollbar" :style="[bodyScrollHeight]" :wrap-style="[bodyScrollWrapHeight]">
+        <table-body
+            :context="context"
+            :highlight="highlightCurrentRow"
+            :row-class-name="rowClassName"
+            :row-style="rowStyle"
+            :store="store"
+            :stripe="stripe"
+            :style="{
+            width: bodyWidth
+          }">
+        </table-body>
+        <div
+            v-if="!data || data.length === 0"
+            ref="emptyBlock"
+            :style="emptyBlockStyle"
+            class="el-table__empty-block">
+          <span class="el-table__empty-text">
+            <slot name="empty">{{ emptyText || t('el.table.emptyText') }}</slot>
+          </span>
+        </div>
+        <div
+            v-if="$slots.append"
+            ref="appendWrapper"
+            class="el-table__append-wrapper">
+          <slot name="append"></slot>
+        </div>
+      </el-scrollbar>
     </div>
+
     <div
         v-if="showSummary"
         v-show="data && data.length > 0"
@@ -215,6 +218,7 @@
 </template>
 
 <script type="text/babel">
+import ElScrollbar from 'element-ui/packages/scrollbar';
 import ElCheckbox from 'element-ui/packages/checkbox';
 import {debounce, throttle} from 'throttle-debounce';
 import {addResizeListener, removeResizeListener} from 'element-ui/src/utils/resize-event';
@@ -227,6 +231,7 @@ import TableBody from './table-body';
 import TableHeader from './table-header';
 import TableFooter from './table-footer';
 import {parseHeight} from './util';
+import scrollbarWidth from 'element-ui/src/utils/scrollbar-width';
 
 let tableIdSeed = 1;
 
@@ -340,7 +345,8 @@ export default {
     TableHeader,
     TableFooter,
     TableBody,
-    ElCheckbox
+    ElCheckbox,
+    ElScrollbar
   },
 
   methods: {
@@ -415,7 +421,8 @@ export default {
 
     // TODO 使用 CSS transform
     syncPostion: throttle(20, function() {
-      const {scrollLeft, scrollTop, offsetWidth, scrollWidth} = this.bodyWrapper;
+      // const { scrollLeft, scrollTop, offsetWidth, scrollWidth } = this.bodyWrapper;
+      const {scrollLeft, scrollTop, offsetWidth, scrollWidth} = this.bodyWrapperScrollbar;
       const {headerWrapper, footerWrapper, fixedBodyWrapper, rightFixedBodyWrapper} = this.$refs;
       if (headerWrapper) headerWrapper.scrollLeft = scrollLeft;
       if (footerWrapper) footerWrapper.scrollLeft = scrollLeft;
@@ -436,10 +443,13 @@ export default {
       if (this.fit) {
         addResizeListener(this.$el, this.resizeListener);
       }
+      // 以下是el-scrollbar
+      this.bodyWrapperScrollbar.addEventListener('scroll', this.syncPostion, {passive: true});
     },
 
     unbindEvents() {
       this.bodyWrapper.removeEventListener('scroll', this.syncPostion, {passive: true});
+      this.bodyWrapperScrollbar.removeEventListener('scroll', this.syncPostion, {passive: true});
       if (this.fit) {
         removeResizeListener(this.$el, this.resizeListener);
       }
@@ -494,6 +504,10 @@ export default {
       return this.$refs.bodyWrapper;
     },
 
+    bodyWrapperScrollbar() {
+      return this.$refs.bodyWrapperScrollbar.wrap;
+    },
+
     shouldUpdateHeight() {
       return this.height ||
           this.maxHeight ||
@@ -517,6 +531,36 @@ export default {
         if (typeof maxHeight === 'number') {
           return {
             'max-height': (maxHeight - footerHeight - (this.showHeader ? headerHeight : 0)) + 'px'
+          };
+        }
+      }
+      return {};
+    },
+
+    bodyScrollHeight() {
+      const {headerHeight = 0, footerHeight = 0} = this.layout;
+      if (this.maxHeight) {
+        const maxHeight = parseHeight(this.maxHeight);
+        if (typeof maxHeight === 'number') {
+          return {
+            'height': (maxHeight - footerHeight - (this.showHeader ? headerHeight : 0)) + 'px'
+          };
+        }
+      }
+      return {height: '100%'};
+    },
+
+    bodyScrollWrapHeight() {
+      const {headerHeight = 0, bodyHeight, footerHeight = 0} = this.layout;
+      if (this.height) {
+        return {
+          height: bodyHeight ? bodyHeight + scrollbarWidth() + 'px' : ''
+        };
+      } else if (this.maxHeight) {
+        const maxHeight = parseHeight(this.maxHeight);
+        if (typeof maxHeight === 'number') {
+          return {
+            'height': (maxHeight - footerHeight - (this.showHeader ? headerHeight : 0) + scrollbarWidth()) + 'px'
           };
         }
       }
@@ -567,10 +611,14 @@ export default {
     },
 
     emptyBlockStyle() {
+      const {bodyHeight, appendHeight} = this.layout;
       if (this.data && this.data.length) return null;
-      let height = '100%';
+      // let height = '100%';
+      let height = bodyHeight + 'px';
       if (this.layout.appendHeight) {
-        height = `calc(100% - ${this.layout.appendHeight}px)`;
+        // height = `calc(100% - ${this.layout.appendHeight}px)`;
+        height = bodyHeight - appendHeight + 'px';
+
       }
       return {
         width: this.bodyWidth,
@@ -636,7 +684,6 @@ export default {
     this.bindEvents();
     this.store.updateColumns();
     this.doLayout();
-
     this.resizeState = {
       width: this.$el.offsetWidth,
       height: this.$el.offsetHeight
